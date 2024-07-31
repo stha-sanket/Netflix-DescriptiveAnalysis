@@ -1,0 +1,213 @@
+#  Loading and Understanding the data for the dataset
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the CSV file
+file_path = '/content/netflix.csv'
+netflix_data = pd.read_csv(file_path)
+
+# Display the first few rows of the dataframe
+print(netflix_data.head())
+print("\n")
+# Display data types and non-null counts
+print(netflix_data.info())
+
+
+# Seeing the number of missing values in the code:
+missing_values = netflix_data.isnull().sum().sum()
+print("Total missing values in the dataset:",missing_values)
+print("\n")
+# Display basic statistics
+netflix_data.describe()
+
+# Visualize Missing Values before cleaning process
+
+# Check for missing values
+missing_values = netflix_data.isnull().sum()
+
+# Visualize the missing values
+plt.figure(figsize=(10, 6))
+sns.barplot(x=missing_values.index, y=missing_values.values)
+plt.title('Missing Values per Column before Cleaning')
+plt.xticks(rotation=45)
+plt.ylabel('Number of Missing Values')
+plt.show()
+
+#data cleaning
+
+## Handling the 'duration' Column
+# Clean 'duration' column
+netflix_data['duration'] = netflix_data['duration'].fillna('0 min')
+netflix_data['duration'] = netflix_data['duration'].str.replace(' min', '').str.replace(' Season', 's').str.replace(' Seasons', 's')
+
+# Separate 'duration' into 'duration_minutes' and 'duration_seasons'
+netflix_data['duration_minutes'] = netflix_data['duration'].apply(lambda x: int(x) if 's' not in x else 0)
+netflix_data['duration_seasons'] = netflix_data['duration'].apply(lambda x: int(x.replace('s', '')) if 's' in x else 0)
+
+# Drop the original 'duration' column
+netflix_data.drop(columns=['duration'], inplace=True)
+
+## Dealing with missing values
+numerical_cols = ['duration_minutes', 'duration_seasons']
+
+for col in numerical_cols:
+    if col in netflix_data.columns:
+        netflix_data[col].fillna(netflix_data[col].median(), inplace=True)
+    else:
+        print(f"Column '{col}' not found in the dataset.")
+
+# Check if there are any remaining missing values
+print(netflix_data.isnull().sum())
+
+## filling missing values with unknown
+categorical_cols = ['director', 'cast', 'country', 'rating']
+netflix_data[categorical_cols] = netflix_data[categorical_cols].fillna('Unknown')
+
+# Check if there are any remaining missing values
+print(netflix_data.isnull().sum())
+
+## dropping missing values
+# Drop rows with any missing values
+netflix_data.dropna(inplace=True)
+
+# Check if there are any remaining missing values
+print(netflix_data.isnull().sum())
+
+# visualizing after data cleaning
+# Check for missing values
+missing_values = netflix_data.isnull().sum()
+
+# Visualize the missing values
+plt.figure(figsize=(10, 6))
+sns.barplot(x=missing_values.index, y=missing_values.values)
+plt.title('Missing Values per Column after Cleaning')
+plt.xticks(rotation=45)
+plt.ylabel('Number of Missing Values')
+plt.show()
+
+# Distribution of Categorical Variables
+# Distribution of content type
+plt.figure(figsize=(8, 6))
+sns.countplot(data=netflix_data, x='type', palette='viridis')
+plt.title('Distribution of Content Type')
+plt.xlabel('Type')
+plt.ylabel('Number of Content')
+plt.show()
+
+# Distribution of ratings
+plt.figure(figsize=(12, 6))
+sns.countplot(data=netflix_data, x='rating', palette='coolwarm', order=netflix_data['rating'].value_counts().index)
+plt.title('Distribution of Ratings')
+plt.xlabel('Rating')
+plt.ylabel('Number of Content')
+plt.xticks(rotation=45)
+plt.show()
+
+# Distribution of Numerical Variables
+# Distribution of release year
+plt.figure(figsize=(12, 6))
+sns.histplot(netflix_data['release_year'], bins=30, kde=True, color='purple')
+plt.title('Distribution of Release Year')
+plt.xlabel('Release Year')
+plt.ylabel('Count')
+plt.show()
+
+# Descriptive Statistics for Numerical Variables
+
+# Summary statistics for numerical variables
+print(netflix_data[['release_year', 'duration_minutes', 'duration_seasons']].describe())
+
+# Additional statistics for numerical variables
+def additional_stats(df):
+    stats = df.agg(['mean', 'median', 'std', 'var', 'skew', 'kurt']).T
+    stats['iqr'] = df.quantile(0.75) - df.quantile(0.25)
+    return stats
+
+print(additional_stats(netflix_data[['release_year', 'duration_minutes', 'duration_seasons']]))
+
+# Frequency Tables for Categorical Variables
+# Frequency tables for categorical variables
+categorical_cols = ['type', 'rating', 'director', 'cast', 'country']
+
+for col in categorical_cols:
+    print(f"Frequency table for {col}:")
+    print(netflix_data[col].value_counts())
+    print()
+
+# Box Plots for Outlier Detection
+# Box plot for duration in minutes
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=netflix_data, x='type', y='duration_minutes')
+plt.title('Box Plot of Duration Minutes by Type')
+plt.xlabel('Type')
+plt.ylabel('Duration Minutes')
+plt.show()
+
+# Clustering
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score
+
+# Select numerical columns for clustering
+numeric_cols = ['release_year', 'duration_minutes', 'duration_seasons']
+
+# Standardize the data
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(netflix_data[numeric_cols])
+
+# Apply K-means clustering
+kmeans = KMeans(n_clusters=3, random_state=42)
+netflix_data['cluster'] = kmeans.fit_predict(scaled_data)
+
+# Calculate silhouette score
+silhouette_avg = silhouette_score(scaled_data, netflix_data['cluster'])
+print(f"Silhouette Score: {silhouette_avg}")
+
+# Visualize the clusters
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=netflix_data, x='release_year', y='duration_minutes', hue='cluster', palette='viridis')
+plt.title('Clusters based on Release Year and Duration')
+plt.xlabel('Release Year')
+plt.ylabel('Duration Minutes')
+plt.show()
+
+# Cluster centers
+cluster_centers = scaler.inverse_transform(kmeans.cluster_centers_)
+cluster_centers_df = pd.DataFrame(cluster_centers, columns=numeric_cols)
+cluster_centers_df['cluster'] = range(1, len(cluster_centers) + 1)
+print("Cluster Centers:")
+print(cluster_centers_df)
+
+# Association Rule Mining
+from mlxtend.frequent_patterns import apriori, association_rules
+
+# Prepare the data for association rule mining
+# For simplicity, we'll create a binary matrix for selected columns
+binary_matrix = pd.get_dummies(netflix_data[['type', 'rating']])
+
+# Apply the Apriori algorithm
+frequent_itemsets = apriori(binary_matrix, min_support=0.1, use_colnames=True)
+
+# Generate the association rules
+rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.5)
+
+# Display the rules
+print(rules[['antecedents', 'consequents', 'support', 'confidence', 'lift']])
+
+# analysing the description column with word cloud
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+# Combine all descriptions into a single string
+text = ' '.join(netflix_data['description'].dropna().tolist())
+
+# Generate the word cloud
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
+
+# Display the word cloud using matplotlib
+plt.figure(figsize=(10, 5))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title('Word Cloud of Netflix Descriptions')
+plt.show()
